@@ -1,0 +1,5 @@
+Flask
+psutil
+nvidia-ml-py
+requests
+flask-cors

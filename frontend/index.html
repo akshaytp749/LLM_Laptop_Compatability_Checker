@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Local LLM Compat Checker</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+  <body>
+    <div id="app">
+      <header class="glass-header">
+        <h1>LLM Compatibility Checker</h1>
+        <p>Determine exactly what runs on your hardware</p>
+        <div class="header-actions">
+          <button id="refresh-hw-btn" class="action-btn">
+            <span class="icon">↻</span> Refresh Hardware
+          </button>
+        </div>
+      </header>
+      
+      <main class="dashboard">
+        
+        <!-- FLUID GRID ROW 1: SIMULATOR -->
+        <section class="simulator-panel glass-card col-12">
+          <div class="panel-header">
+             <h2 class="info-wrapper">
+               Interactive VRAM Simulator 🎛️
+               <span class="info-icon">?</span>
+               <span class="tooltip tooltip-wide">Adjust these settings to see how compression (Quantization) and memory (Context Window) affect which models you can run.</span>
+             </h2>
+             <span class="badge badge-primary">Live Recalculation</span>
+          </div>
+          
+          <div class="simulator-controls">
+            <div class="sim-control">
+              <label class="info-wrapper">
+                Quantization (Compression)
+                <span class="info-icon">?</span>
+                <span class="tooltip tooltip-wide">Lowers the precision of the AI's "brain" to save memory. <b>4-bit</b> is standard (great balance). <b>8-bit</b> is smarter but huge. <b>2-bit</b> is tiny but can act "drunk".</span>
+              </label>
+              <div class="slider-labels">
+                <span>2-bit (Tiny/Dumb)</span>
+                <span id="quant-val-display" class="slider-val">4-bit (Balanced)</span>
+                <span>8-bit (Heavy/Smart)</span>
+              </div>
+              <input type="range" id="sim-quant" min="2" max="8" step="1" value="4" class="slider">
+            </div>
+
+            <div class="sim-control">
+              <label class="info-wrapper">
+                Context Window Size
+                <span class="info-icon">?</span>
+                <span class="tooltip tooltip-wide">The AI's "short-term memory" for your conversation. <b>2K/4K</b> is fine for chatting. <b>32K+</b> is needed for reading entire books or large codebases, but eats massive RAM.</span>
+              </label>
+              <div class="slider-labels">
+                <span>2K (Chat)</span>
+                <span id="ctx-val-display" class="slider-val">8K (Standard) - ~1.5 GB</span>
+                <span>128K (Books)</span>
+              </div>
+              <input type="range" id="sim-ctx" min="0" max="4" step="1" value="1" class="slider">
+            </div>
+          </div>
+        </section>
+
+        <!-- ROW 2: HARDWARE (4) + CHARTS (8) -->
+        <section class="hardware-panel glass-card col-4">
+          <h2>Your System Specs</h2>
+          <div id="hardware-status" class="loading">Analyzing hardware...</div>
+          
+          <div class="inner-panel mt-2">
+             <h3 class="inner-title">Synthetic Benchmark</h3>
+             <p class="text-muted text-sm mb-1">Run a quick CPU stress test to estimate your "AI Readiness Score" (0-100).</p>
+             <button id="run-bench-btn" class="action-btn btn-primary w-full justify-center">
+                 <span class="icon">🚀</span> Run Benchmark
+             </button>
+             <div id="bench-results" class="results-box hidden mt-1"></div>
+          </div>
+        </section>
+        
+        <section class="chart-panel glass-card col-8">
+           <h2>Resource History (60s)</h2>
+           <div class="chart-container">
+               <canvas id="historyChart"></canvas>
+           </div>
+        </section>
+
+        <!-- ROW 3: OLLAMA (4) + MODELS (8) -->
+        <section class="ollama-panel glass-card col-4">
+           <h2 class="info-wrapper">
+             Ollama Status
+             <span class="info-icon">?</span>
+             <span class="tooltip">Ollama is an easy-to-use application that downloads and runs open-source Local LLMs via the command line.</span>
+           </h2>
+           <div id="ollama-status">Detecting local Ollama instance...</div>
+        </section>
+
+        <section class="models-panel glass-card col-8">
+          <h2>Trending Models (HuggingFace)</h2>
+          <div id="models-list" class="loading">Fetching models & calculating VRAM...</div>
+        </section>
+
+        <!-- ROW 4: SEARCH (12) -->
+        <section class="search-panel glass-card col-12">
+          <h2 class="info-wrapper">
+            Test Custom Model (HuggingFace)
+            <span class="info-icon">?</span>
+            <span class="tooltip tooltip-wide">Queries the largest AI model repository (HuggingFace.co). Paste an ID like 'meta-llama/Meta-Llama-3-70B' to see if you can run it.</span>
+          </h2>
+          <p class="text-muted text-sm mb-1">Paste any model ID (e.g., <code>Qwen/Qwen2.5-Coder-32B-Instruct</code>)</p>
+          <div class="search-box">
+            <input type="text" id="model-search-input" placeholder="Enter HuggingFace Model ID...">
+            <button id="model-search-btn" class="btn-primary">Check Compatibility</button>
+          </div>
+          <div id="search-results-container" class="mt-1.5 hidden"></div>
+        </section>
+
+      </main>
+    </div>
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>

@@ -306,6 +306,8 @@ def search_custom_model():
     if not model_id:
         return jsonify({"error": "No model_id provided"}), 400
         
+    model_id = model_id.replace(" ", "")
+        
     try:
         data = fetch_hf_model_info(model_id)
         

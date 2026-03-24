@@ -292,7 +292,7 @@ function setupSearchHandler() {
     const resultsContainer = document.getElementById('search-results-container');
     
     searchBtn.addEventListener('click', async () => {
-        const modelId = searchInput.value.trim();
+        const modelId = searchInput.value.trim().replace(/\s+/g, '');
         if(!modelId) return;
         
         searchBtn.disabled = true;

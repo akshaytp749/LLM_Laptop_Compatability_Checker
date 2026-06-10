@@ -4,8 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Local LLM Compat Checker</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <title>Local LLM Compatibility Checker</title>
   </head>
   <body>
     <div id="app">
@@ -55,7 +54,7 @@
               </label>
               <div class="slider-labels">
                 <span>2K (Chat)</span>
-                <span id="ctx-val-display" class="slider-val">8K (Standard) - ~1.5 GB</span>
+                <span id="ctx-val-display" class="slider-val">8K (Standard)</span>
                 <span>128K (Books)</span>
               </div>
               <input type="range" id="sim-ctx" min="0" max="4" step="1" value="1" class="slider">
@@ -109,7 +108,8 @@
           </h2>
           <p class="text-muted text-sm mb-1">Paste any model ID (e.g., <code>Qwen/Qwen2.5-Coder-32B-Instruct</code>)</p>
           <div class="search-box">
-            <input type="text" id="model-search-input" placeholder="Enter HuggingFace Model ID...">
+            <input type="text" id="model-search-input" list="model-suggestions" placeholder="Enter HuggingFace Model ID...">
+            <datalist id="model-suggestions"></datalist>
             <button id="model-search-btn" class="btn-primary">Check Compatibility</button>
           </div>
           <div id="search-results-container" class="mt-1.5 hidden"></div>
@@ -117,6 +117,6 @@
 
       </main>
     </div>
-    <script type="module" src="/main.js"></script>
+    <script type="module" src="/src/main.js"></script>
   </body>
 </html>

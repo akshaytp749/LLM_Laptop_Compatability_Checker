@@ -1,3 +1,6 @@
+// Fonts are bundled locally so the app works fully offline.
+import '@fontsource-variable/inter';
+import '@fontsource-variable/jetbrains-mono';
 import './style.css';
 import Chart from 'chart.js/auto';
 import {
@@ -199,7 +202,7 @@ function initChart(hasGpu) {
   if (hasGpu) datasets.push(makeDataset('VRAM %', '#10b981', 'rgba(16, 185, 129, 0.1)'));
 
   Chart.defaults.color = '#a1a1b0';
-  Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
+  Chart.defaults.font.family = "'Inter Variable', 'Inter', system-ui, sans-serif";
   historyChart = new Chart(ctx, {
     type: 'line',
     data: { labels: [], datasets },

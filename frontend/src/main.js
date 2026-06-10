@@ -148,9 +148,11 @@ async function pollSystemStats() {
       if (!bar || !val) return;
       bar.style.width = `${percent}%`;
       val.textContent = `${percent.toFixed(1)}%`;
-      if (percent > 85) bar.style.backgroundColor = 'var(--danger)';
-      else if (percent > 65) bar.style.backgroundColor = 'var(--warning)';
-      else bar.style.backgroundColor = 'var(--success)';
+      let color = 'var(--success)';
+      if (percent > 85) color = 'var(--danger)';
+      else if (percent > 65) color = 'var(--warning)';
+      bar.style.backgroundColor = color;
+      bar.style.color = color; // drives the currentColor glow
     };
 
     updateBar('stat-cpu', stats.cpu_percent);
@@ -196,7 +198,8 @@ function initChart(hasGpu) {
   ];
   if (hasGpu) datasets.push(makeDataset('VRAM %', '#10b981', 'rgba(16, 185, 129, 0.1)'));
 
-  Chart.defaults.color = '#94a3b8';
+  Chart.defaults.color = '#a1a1b0';
+  Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
   historyChart = new Chart(ctx, {
     type: 'line',
     data: { labels: [], datasets },
@@ -282,26 +285,26 @@ function renderOllama(ollamaData) {
 
   if (ollamaData.is_running) {
     container.append(
-      el('div', { style: 'color: var(--success); font-weight: 600; margin-bottom: 1rem;' }, '✅ Ollama is running locally!'),
-      el('p', { style: 'color: var(--text-muted); font-size: 0.9em;' },
+      el('div', { class: 'status-line ok' }, '✅ Ollama is running locally!'),
+      el('p', { class: 'text-muted text-sm', style: 'margin: 0;' },
         ollamaData.installed_models.length ? 'Installed models:' : 'No models installed yet.')
     );
-    const list = el('div', { style: 'display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem;' });
+    const list = el('div', { class: 'ollama-models' });
     for (const model of ollamaData.installed_models) {
       list.append(
         el(
           'div',
-          { style: 'display:flex; justify-content:space-between; align-items:center; background: rgba(255,255,255,0.06); padding: 6px 10px; border-radius: 6px; font-size: 0.85em;' },
+          { class: 'ollama-model-row' },
           el('span', {}, model.name),
           el(
             'span',
-            { style: 'display:flex; align-items:center; gap:0.5rem;' },
-            el('span', { style: 'color: var(--text-muted);' }, `${model.size_gb} GB`),
+            { class: 'row-meta' },
+            el('span', { class: 'model-size' }, `${model.size_gb} GB`),
             el(
               'button',
               {
+                class: 'btn-icon-danger',
                 title: `Delete ${model.name}`,
-                style: 'background:transparent;border:1px solid #ef4444;color:#ef4444;border-radius:4px;cursor:pointer;padding: 1px 6px;',
                 onclick: () => handleDeleteModel(model.name),
               },
               '🗑️'
@@ -313,17 +316,17 @@ function renderOllama(ollamaData) {
     container.append(list);
   } else if (ollamaData.is_installed) {
     container.append(
-      el('div', { style: 'color: var(--warning); font-weight: 600;' }, '⚠️ Ollama is installed but not running.'),
-      el('p', { style: 'color: var(--text-muted); font-size: 0.9em; margin-top: 0.5rem;' }, 'Please start the Ollama application on your machine.')
+      el('div', { class: 'status-line warn' }, '⚠️ Ollama is installed but not running.'),
+      el('p', { class: 'text-muted text-sm', style: 'margin-top: 0.5rem;' }, 'Please start the Ollama application on your machine.')
     );
   } else {
     container.append(
-      el('div', { style: 'color: var(--danger); font-weight: 600;' }, '❌ Ollama not detected.'),
+      el('div', { class: 'status-line err' }, '❌ Ollama not detected.'),
       el(
         'p',
-        { style: 'color: var(--text-muted); font-size: 0.9em; margin-top: 0.5rem;' },
+        { class: 'text-muted text-sm', style: 'margin-top: 0.5rem;' },
         'For the easiest local LLM experience, download it from ',
-        el('a', { href: 'https://ollama.com', target: '_blank', style: 'color: var(--primary)' }, 'ollama.com'),
+        el('a', { href: 'https://ollama.com', target: '_blank', class: 'link-primary' }, 'ollama.com'),
         '.'
       )
     );
@@ -427,7 +430,7 @@ function buildModelCard(model, rawModels) {
   const bar = el(
     'div',
     { class: 'vram-bar-container' },
-    el('div', { class: 'vram-bar', style: `width: ${percent}%; background-color: ${barColor}` })
+    el('div', { class: 'vram-bar', style: `width: ${percent}%; background-color: ${barColor}; color: ${barColor}` })
   );
 
   return el('div', { class: 'model-card' }, header, paramsRow, memoryRow, speedRow, bar, buildCommandBox(model, rawModels));
@@ -435,25 +438,21 @@ function buildModelCard(model, rawModels) {
 
 function buildCommandBox(model, rawModels) {
   if (!model.fits) {
-    return el(
-      'div',
-      { class: 'cmd-box', style: 'color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3)' },
-      'Requires a hardware upgrade to run natively.'
-    );
+    return el('div', { class: 'cmd-box blocked' }, 'Requires a hardware upgrade to run natively.');
   }
 
   if (model.is_installed) {
     return el(
       'div',
-      { class: 'cmd-box', style: 'background: rgba(16, 185, 129, 0.1); color: #34d399; flex-direction: column; gap: 0.5rem;' },
+      { class: 'cmd-box ready' },
       el(
         'div',
-        { style: 'display:flex; justify-content: space-between; align-items:center; gap:0.5rem;' },
+        { class: 'cmd-row' },
         el('span', {}, `✅ Ready! Run: ${model.run_command}`),
         el(
           'button',
           {
-            style: 'background:transparent;border:1px solid #ef4444;color:#ef4444;border-radius:4px;cursor:pointer;padding: 2px 8px;',
+            class: 'btn-danger-outline',
             onclick: () => handleDeleteModel(model.ollama_cmd, model, rawModels),
           },
           '🗑️ Delete'
@@ -462,14 +461,14 @@ function buildCommandBox(model, rawModels) {
     );
   }
 
-  const progress = el('div', { style: 'display:none; width:100%; font-size: 0.8em; color: var(--text-muted);' });
+  const progress = el('div', { class: 'dl-progress' });
   const buttons = el(
     'div',
-    { style: 'display: flex; gap: 0.5rem;' },
+    { class: 'cmd-actions' },
     el(
       'button',
       {
-        style: 'background:transparent;border:1px solid #a78bfa;color:#a78bfa;border-radius:4px;cursor:pointer;padding: 2px 8px;',
+        class: 'btn-ghost',
         onclick: () => navigator.clipboard.writeText(model.run_command),
       },
       'Copy'
@@ -478,24 +477,15 @@ function buildCommandBox(model, rawModels) {
 
   const ollamaRunning = state.ollama ? state.ollama.is_running : false;
   if (ollamaRunning) {
-    const dlBtn = el(
-      'button',
-      { style: 'background:var(--primary);border:none;color:white;border-radius:4px;cursor:pointer;padding: 2px 8px; font-weight:bold;' },
-      '⬇️ Download'
-    );
+    const dlBtn = el('button', { class: 'btn-download' }, '⬇️ Download');
     dlBtn.addEventListener('click', () => handleDownloadModel(model, rawModels, dlBtn, progress));
     buttons.append(dlBtn);
   }
 
   return el(
     'div',
-    { class: 'cmd-box', style: 'flex-direction: column; gap: 0.5rem;' },
-    el(
-      'div',
-      { style: 'display: flex; justify-content: space-between; align-items:center; gap:0.5rem;' },
-      el('span', {}, `> ${model.run_command}`),
-      buttons
-    ),
+    { class: 'cmd-box stacked' },
+    el('div', { class: 'cmd-row' }, el('span', {}, `> ${model.run_command}`), buttons),
     progress
   );
 }
@@ -638,9 +628,7 @@ function setupSearchHandler() {
       const data = await res.json();
       if (data.error) {
         clear(resultsContainer);
-        resultsContainer.append(
-          el('div', { style: 'color:var(--danger); padding: 1rem; border: 1px solid var(--danger); border-radius: 8px;' }, `Error: ${data.error}`)
-        );
+        resultsContainer.append(el('div', { class: 'error-box' }, `Error: ${data.error}`));
         state.searchResults = [];
       } else {
         state.searchResults = [data];
@@ -734,10 +722,10 @@ function initBenchmarkButton() {
         if (data.score < 50) color = 'var(--danger)';
         else if (data.score < 80) color = 'var(--warning)';
         results.append(
-          el('div', { style: `font-size: 2.5rem; font-weight: 800; color: ${color}; line-height: 1;` }, String(data.score)),
-          el('div', { style: 'font-size: 0.9rem; color: var(--text-muted); margin-top: 0.25rem;' }, '/ 100 Score'),
-          el('div', { style: 'margin-top: 0.5rem; font-weight: 600; color: var(--primary);' }, data.label),
-          el('div', { style: 'font-size: 0.8rem; color: var(--text-muted); margin-top: 0.5rem;' }, `Completed in ${data.duration_sec}s`)
+          el('div', { class: 'bench-score', style: `color: ${color};` }, String(data.score)),
+          el('div', { class: 'bench-score-sub' }, '/ 100 Score'),
+          el('div', { class: 'bench-label' }, data.label),
+          el('div', { class: 'bench-duration' }, `Completed in ${data.duration_sec}s`)
         );
       }
     } catch {

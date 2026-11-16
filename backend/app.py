@@ -11,7 +11,6 @@ import time
 import psutil
 import requests
 from flask import Flask, jsonify, request
-from flask_cors import CORS
 
 try:
     import pynvml
@@ -23,6 +22,10 @@ except ImportError:
 # Configuration (overridable via environment variables)
 # ---------------------------------------------------------------------------
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
+# Loopback by default: this API can pull and delete Ollama models, so it must
+# not be reachable from the LAN unless explicitly asked for (Docker sets
+# HOST=0.0.0.0 inside the container and publishes the port on 127.0.0.1 only).
+HOST = os.environ.get("HOST", "127.0.0.1")
 PORT = int(os.environ.get("PORT", "5000"))
 DEBUG = os.environ.get("FLASK_DEBUG", "0") == "1"
 HF_API = "https://huggingface.co/api"
@@ -30,7 +33,9 @@ TRENDING_TTL_SEC = 30 * 60
 HF_MODEL_CACHE_TTL_SEC = 10 * 60
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+# No CORS on purpose. The frontend reaches this API same-origin through the
+# Vite proxy, so cross-origin access is never needed - and allowing it would
+# let any website open in the browser call /api/ollama/delete or /pull.
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -57,13 +62,20 @@ def system_cpu_percent():
 
 # Curated fallback list: known-good Ollama commands and parameter counts.
 CURATED_MODELS = [
-    {"id": "meta-llama/Meta-Llama-3-8B-Instruct", "name": "Llama 3 (8B)", "params_b": 8.0, "ollama_cmd": "llama3"},
-    {"id": "microsoft/Phi-3-mini-4k-instruct", "name": "Phi-3 Mini (3.8B)", "params_b": 3.8, "ollama_cmd": "phi3"},
-    {"id": "mistralai/Mistral-7B-Instruct-v0.3", "name": "Mistral v0.3 (7B)", "params_b": 7.0, "ollama_cmd": "mistral"},
-    {"id": "google/gemma-2-9b-it", "name": "Gemma 2 (9B)", "params_b": 9.0, "ollama_cmd": "gemma2"},
-    {"id": "Qwen/Qwen2-72B-Instruct", "name": "Qwen2 (72B)", "params_b": 72.0, "ollama_cmd": "qwen2:72b"},
-    {"id": "deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct", "name": "DeepSeek Coder V2 Lite (16B)", "params_b": 16.0,
-     "ollama_cmd": "deepseek-coder-v2"},
+    # Verified 2026-11 against ollama.com/library (tags) and the HuggingFace API
+    # (safetensors parameter counts). Ordered small -> large.
+    {"id": "meta-llama/Llama-3.2-3B-Instruct", "name": "Llama 3.2 (3B)", "params_b": 3.2, "ollama_cmd": "llama3.2:3b"},
+    {"id": "google/gemma-3-4b-it", "name": "Gemma 3 (4B)", "params_b": 4.3, "ollama_cmd": "gemma3:4b"},
+    {"id": "Qwen/Qwen3.5-4B", "name": "Qwen 3.5 (4B)", "params_b": 4.7, "ollama_cmd": "qwen3.5:4b"},
+    {"id": "Qwen/Qwen3-8B", "name": "Qwen 3 (8B)", "params_b": 8.2, "ollama_cmd": "qwen3:8b"},
+    {"id": "Qwen/Qwen3.5-9B", "name": "Qwen 3.5 (9B)", "params_b": 9.7, "ollama_cmd": "qwen3.5:9b"},
+    {"id": "google/gemma-3-12b-it", "name": "Gemma 3 (12B)", "params_b": 12.2, "ollama_cmd": "gemma3:12b"},
+    {"id": "microsoft/phi-4", "name": "Phi-4 (14B)", "params_b": 14.7, "ollama_cmd": "phi4:14b"},
+    {"id": "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B", "name": "DeepSeek R1 (14B)", "params_b": 14.8,
+     "ollama_cmd": "deepseek-r1:14b"},
+    {"id": "openai/gpt-oss-20b", "name": "GPT-OSS (20B)", "params_b": 20.9, "ollama_cmd": "gpt-oss:20b"},
+    {"id": "Qwen/Qwen3.8-27B", "name": "Qwen 3.8 (27B)", "params_b": 27.8, "ollama_cmd": "qwen3.8:27b"},
+    {"id": "meta-llama/Llama-3.3-70B-Instruct", "name": "Llama 3.3 (70B)", "params_b": 70.6, "ollama_cmd": "llama3.3:70b"},
 ]
 
 
@@ -106,6 +118,28 @@ def is_model_installed(ollama_cmd, installed_names):
         elif name.split(":")[0] == cmd:
             return True
     return False
+
+
+def tokens_per_sec(eval_count, eval_duration_ns):
+    """Generation speed from Ollama's eval_count / eval_duration (nanoseconds)."""
+    if not eval_count or not eval_duration_ns or eval_duration_ns <= 0:
+        return None
+    return round(eval_count / eval_duration_ns * 1e9, 1)
+
+
+def benchmark_candidates(installed_models, requested=None, limit=3):
+    """Model names to try for the real-inference benchmark, in order.
+
+    A requested model goes first if it is installed; otherwise smallest first,
+    so the measurement is quick and most likely to fit in memory. Capped because
+    some installed models (embedding-only) cannot generate and are skipped.
+    """
+    by_size = sorted((m for m in installed_models if m.get("name")), key=lambda m: m.get("size_gb", 0))
+    names = [m["name"] for m in by_size]
+    if requested and requested in names:
+        names.remove(requested)
+        names.insert(0, requested)
+    return names[:limit]
 
 
 # ---------------------------------------------------------------------------
@@ -434,7 +468,7 @@ def pull_ollama_model():
         try:
             with requests.post(
                 f"{OLLAMA_HOST}/api/pull",
-                json={"name": model_name},
+                json={"model": model_name},
                 stream=True,
                 timeout=(5, 300),
             ) as r:
@@ -455,7 +489,7 @@ def delete_ollama_model():
         return jsonify({"error": "No model name provided"}), 400
 
     try:
-        response = requests.delete(f"{OLLAMA_HOST}/api/delete", json={"name": model_name}, timeout=10)
+        response = requests.delete(f"{OLLAMA_HOST}/api/delete", json={"model": model_name}, timeout=10)
         if response.status_code == 200:
             return jsonify({"success": True})
         return jsonify({"error": f"Ollama returned {response.status_code}"}), response.status_code
@@ -463,14 +497,67 @@ def delete_ollama_model():
         return jsonify({"error": str(e)}), 502
 
 
+BENCH_PROMPT = "Explain in three sentences why the sky is blue."
+BENCH_MAX_TOKENS = 96
+
+
+def measure_ollama_speed(requested=None):
+    """Run a short real generation on an installed model and report tokens/sec.
+
+    Returns {"model", "tokens_per_sec", "tokens", "load_sec"} or
+    {"error": reason} when nothing could be measured. Never raises.
+    """
+    ollama_info = check_ollama()
+    if not ollama_info["is_running"]:
+        return {"error": "Ollama is not running"}
+    candidates = benchmark_candidates(ollama_info["installed_models"], requested)
+    if not candidates:
+        return {"error": "No Ollama models installed"}
+
+    last_error = "No installed model could generate text"
+    for name in candidates:
+        try:
+            response = requests.post(
+                f"{OLLAMA_HOST}/api/generate",
+                json={
+                    "model": name,
+                    "prompt": BENCH_PROMPT,
+                    "stream": False,
+                    "think": False,
+                    "options": {"num_predict": BENCH_MAX_TOKENS, "temperature": 0},
+                },
+                timeout=(5, 180),
+            )
+            data = response.json()
+        except (requests.exceptions.RequestException, ValueError) as e:
+            last_error = str(e)
+            continue
+        tps = tokens_per_sec(data.get("eval_count"), data.get("eval_duration"))
+        if response.status_code != 200 or tps is None:
+            # e.g. embedding-only models: "does not support generate"
+            last_error = data.get("error") or f"Ollama returned {response.status_code}"
+            continue
+        return {
+            "model": name,
+            "tokens_per_sec": tps,
+            "tokens": data.get("eval_count"),
+            "load_sec": round(data.get("load_duration", 0) / 1e9, 2),
+        }
+    return {"error": last_error}
+
+
 @app.route("/api/benchmark", methods=["POST"])
 def run_benchmark():
-    """Synthetic single-core stress test producing a rough 0-100 readiness score.
+    """Benchmark: a real Ollama generation when possible, plus a synthetic score.
 
-    Note: this measures Python math throughput, which only loosely correlates
-    with inference speed. The per-model tokens/sec estimate in the UI (based on
-    memory bandwidth) is the more meaningful number.
+    "measured" is actual tokens/sec from a short generation on an installed
+    model (the smallest, or the one named in the JSON body). The synthetic
+    0-100 score only measures Python math throughput and loosely correlates
+    with inference speed; it is kept as the fallback when Ollama has no models.
     """
+    body = request.get_json(silent=True) or {}
+    measured = measure_ollama_speed(body.get("model"))
+
     start_time = time.time()
     v = 0.0
     for i in range(1, 4_000_000):
@@ -502,8 +589,9 @@ def run_benchmark():
         "label": speed_label,
         "duration_sec": round(duration, 3),
         "has_gpu": has_gpu,
+        "measured": measured,
     })
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=PORT, debug=DEBUG, threaded=True)
+    app.run(host=HOST, port=PORT, debug=DEBUG, threaded=True)

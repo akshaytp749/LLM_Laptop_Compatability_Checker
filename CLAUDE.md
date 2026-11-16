@@ -28,6 +28,7 @@ Windows one-shot: `install.bat` then `start.bat`. Docker: `docker compose up --b
 ## Config (env vars)
 
 - `OLLAMA_HOST` (default `http://localhost:11434`)
+- `HOST` (backend bind address, default `127.0.0.1`; the API can pull/delete models, so never expose it on the LAN and never add CORS - the frontend reaches it same-origin via the Vite proxy)
 - `PORT` (backend, default 5000), `FLASK_DEBUG=1` to enable debug mode (never default it on — RCE risk on 0.0.0.0)
 - `VITE_PROXY_TARGET` (frontend proxy target)
 

@@ -35,6 +35,7 @@ Navigate to `http://localhost:5173`. The backend finds your host Ollama via `hos
 | Variable | Default | Notes |
 |---|---|---|
 | `OLLAMA_HOST` | `http://localhost:11434` | |
+| `HOST` | `127.0.0.1` | Backend bind address. Loopback on purpose: the API can pull and delete models |
 | `PORT` | `5000` | Backend |
 | `FLASK_DEBUG` | off | Set `1` for dev only |
 | `VITE_PROXY_TARGET` | `http://127.0.0.1:5000` | Used by Vite proxy |

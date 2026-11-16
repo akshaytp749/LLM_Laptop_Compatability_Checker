@@ -711,7 +711,7 @@ function initBenchmarkButton() {
   btn.addEventListener('click', async () => {
     btn.disabled = true;
     clear(btn);
-    btn.append(el('span', { class: 'icon spin' }, '↻'), ' Running Stress Test...');
+    btn.append(el('span', { class: 'icon spin' }, '↻'), ' Running Benchmark...');
     results.style.display = 'none';
     clear(results);
 
@@ -720,15 +720,32 @@ function initBenchmarkButton() {
       const data = await res.json();
       if (data.error) {
         results.append(el('div', { style: 'color:var(--danger)' }, `Benchmark failed: ${data.error}`));
+      } else if (data.measured && data.measured.tokens_per_sec) {
+        // Real generation on an installed model beats any synthetic score.
+        const m = data.measured;
+        let color = 'var(--success)';
+        if (m.tokens_per_sec < 5) color = 'var(--danger)';
+        else if (m.tokens_per_sec < 20) color = 'var(--warning)';
+        results.append(
+          el('div', { class: 'bench-score', style: `color: ${color};` }, String(m.tokens_per_sec)),
+          el('div', { class: 'bench-score-sub' }, 'tokens / sec (measured)'),
+          el('div', { class: 'bench-label' }, m.model),
+          el(
+            'div',
+            { class: 'bench-duration' },
+            `${m.tokens} tokens generated · model load ${m.load_sec}s · synthetic CPU score ${data.score}/100`
+          )
+        );
       } else {
         let color = 'var(--success)';
         if (data.score < 50) color = 'var(--danger)';
         else if (data.score < 80) color = 'var(--warning)';
+        const why = data.measured && data.measured.error ? ` · no real measurement: ${data.measured.error}` : '';
         results.append(
           el('div', { class: 'bench-score', style: `color: ${color};` }, String(data.score)),
-          el('div', { class: 'bench-score-sub' }, '/ 100 Score'),
+          el('div', { class: 'bench-score-sub' }, '/ 100 Synthetic Score'),
           el('div', { class: 'bench-label' }, data.label),
-          el('div', { class: 'bench-duration' }, `Completed in ${data.duration_sec}s`)
+          el('div', { class: 'bench-duration' }, `Completed in ${data.duration_sec}s${why}`)
         );
       }
     } catch {

@@ -4,7 +4,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
     environment:
       - PYTHONUNBUFFERED=1
       # Reach the Ollama instance running on the Docker host.
@@ -27,7 +27,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "5173:5173"
+      - "127.0.0.1:5173:5173"
     environment:
       - CHOKIDAR_USEPOLLING=true
       # Vite dev-server proxies /api to the backend container.
